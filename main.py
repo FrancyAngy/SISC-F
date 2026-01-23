@@ -208,6 +208,8 @@ class Core(Elaboratable):
     
     def execute(self, m: Module):
         with m.Switch(self.ir):
+            with m.Case(0x00):
+                self.HALT(m)
             with m.Case(0x01):
                 self.NOP(m)
             with m.Case(0x10):
@@ -380,6 +382,9 @@ class Core(Elaboratable):
             ]
             m.d.sync += self.rx.eq(self.alu_out)
             self.end_instr(m, self.ip + 1)
+    
+    def HALT(self, m: Module):
+        self.end_instr(m, self.ip)
 
     def instruction_end_handler(self, m: Module):
         with m.If(self.end_instr_flag):
@@ -465,9 +470,7 @@ if __name__ == "__main__":
         0x0042: 0x10,
         0x0043: 0x34,
         0x0044: 0x05,
-        0x0045: 0x10,
-        0x0046: 0x41,
-        0x0047: 0x00
+        0x0045: 0x00
     }
     with m.Switch(core.addr):
         for addr, data in mem.items():
