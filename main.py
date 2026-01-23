@@ -45,11 +45,12 @@ class Reg16(IntEnum):
     ALU32H = 8
 
 class AluOps(IntEnum):
-    ADD = 0
-    SUB = 1
-    MUL = 2
-    INC = 3
-    DEC = 4
+    NONE = 0
+    ADD = auto()
+    SUB = auto()
+    MUL = auto()
+    INC = auto()
+    DEC = auto()
 
 class Flags(IntEnum):
     ZERO = 0
@@ -150,12 +151,25 @@ class Core(Elaboratable):
                         self.flags[Flags.CARRY].eq(self.alu32[16]),
                         self.flags[Flags.NEGATIVE].eq(0)
                     ]
-                    m.d.comb += self.alu32.eq(0)
+                with m.Case(AluOps.SUB):
+                    m.d.comb += [
+                        self.alu_out.eq(self.alu_1 - self.alu_2),
+                        self.alu32.eq(self.alu_1 - self.alu_2)
+                    ]
+                    m.d.sync += [
+                        self.flags[Flags.ZERO].eq(self.alu_out == 0),
+                        self.flags[Flags.CARRY].eq(self.alu32[16]),
+                        self.flags[Flags.NEGATIVE].eq(0)
+                   ]
                 with m.Default():
                     m.d.comb += self.alu_out.eq(0)
                     m.d.sync += self.flags.eq(0)
                     m.d.sync += self.flags[Flags.ERROR].eq(1)
-        m.d.comb += self.alu_en.eq(0)
+
+        m.d.comb += [
+            self.alu32.eq(0),
+            self.alu_en.eq(0)
+        ]
 
                     
 
@@ -210,6 +224,12 @@ class Core(Elaboratable):
                 self.ADDB(m)
             with m.Case(0x32):
                 self.ADDX(m)
+            with m.Case(0x33):
+                self.SUBA(m)
+            with m.Case(0x34):
+                self.SUBB(m)
+            with m.Case(0x35):
+                self.SUBX(m)
             with m.Default(): #Illegal Instruction, treat as NOP
                 self.NOP(m)
     
@@ -288,6 +308,45 @@ class Core(Elaboratable):
             m.d.sync += self.rx.eq(self.alu_out)
             self.end_instr(m, self.ip + 1)
 
+    def SUBA(self, m:Module):
+        with m.If(self.instr_state == 1):
+            self.advance_ip_goto_state(m, 2)
+        with m.Else():
+            m.d.comb += [
+                self.alu_1.eq(self.ra),
+                self.alu_2.eq(self.data_in),
+                self.alu_op.eq(AluOps.SUB),
+                self.alu_en.eq(1)
+            ]
+            m.d.sync += self.ra.eq(self.alu_out)
+            self.end_instr(m, self.ip + 1)
+
+    def SUBB(self, m:Module):
+        with m.If(self.instr_state == 1):
+            self.advance_ip_goto_state(m, 2)
+        with m.Else():
+            m.d.comb += [
+                self.alu_1.eq(self.rb),
+                self.alu_2.eq(self.data_in),
+                self.alu_op.eq(AluOps.SUB),
+                self.alu_en.eq(1)
+            ]
+            m.d.sync += self.rb.eq(self.alu_out)
+            self.end_instr(m, self.ip + 1)
+
+    def SUBX(self, m:Module):
+        with m.If(self.instr_state == 1):
+            self.advance_ip_goto_state(m, 2)
+        with m.Else():
+            m.d.comb += [
+                self.alu_1.eq(self.rx),
+                self.alu_2.eq(self.data_in),
+                self.alu_op.eq(AluOps.SUB),
+                self.alu_en.eq(1)
+            ]
+            m.d.sync += self.rx.eq(self.alu_out)
+            self.end_instr(m, self.ip + 1)
+
     def instruction_end_handler(self, m: Module):
         with m.If(self.end_instr_flag):
             m.d.sync += self.addr.eq(self.end_instr_addr)
@@ -354,12 +413,12 @@ if __name__ == "__main__":
         0x0023: 0x20,
         0x0024: 0x15,
         0x0025: 0x21,
-        0x0026: 0xCD,
+        0x0026: 0x04,
         0x0027: 0x22,
         0x0028: 0xAB,
         0x0029: 0x30,
         0x002A: 0x10,
-        0x002B: 0x31,
+        0x002B: 0x34,
         0x002C: 0x02,
         0x002D: 0x32,
         0x002E: 0x01,
