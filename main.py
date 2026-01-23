@@ -31,6 +31,7 @@ class Reg8(IntEnum):
     INT_RET_H = 20
     QPL = 21
     QPH = 22
+    FLAGS = 23
 
 class Reg16(IntEnum):
     IP = 0
@@ -40,7 +41,21 @@ class Reg16(IntEnum):
     TMP = 4
     INT_ARGS = 5
     INT_RET = 6
+    ALU32L = 7
+    ALU32H = 8
 
+class AluOps(IntEnum):
+    ADD = 0
+    SUB = 1
+    MUL = 2
+    INC = 3
+    DEC = 4
+
+class Flags(IntEnum):
+    ZERO = 0
+    CARRY = 1
+    NEGATIVE = 2
+    ERROR = 3
 
 class Core(Elaboratable):
     def __init__(self):
@@ -57,15 +72,19 @@ class Core(Elaboratable):
         self.ir = Signal(8, reset_less=True)
         self.sp = Signal(16, reset_less=True)
         self.qp = Signal(16, reset_less=True)
+        self.flags = Signal(8, reset_less=True)
         self.tmp8 = Signal(8)
         self.tmp16 = Signal(16)
+        self.alu32 = Signal(32)
 
         #BUSes
         self.interrupt_args = Signal(16)
         self.interrupt_return = Signal(16)
         self.alu_1 = Signal(16)
         self.alu_2 = Signal(16)
+        self.alu_op = Signal(AluOps)
         self.alu_out = Signal(16)
+        self.alu_en = Signal()
 
         #BUS selectors
         self.alu_1_sel = Signal(Reg16)
@@ -116,12 +135,37 @@ class Core(Elaboratable):
         }
 
     def ports(self) -> List[Signal]:
-        return [self.ip, self.ir, self.addr, self.data_in, self.tmp8, self.data_out, self.RW]
+        return [self.ip, self.ir, self.addr, self.data_in, self.tmp8, self.data_out, self.RW, self.ra, self.rb, self.rx, self.flags]
         
+    def alu_handler(self, m: Module):
+        with m.If(self.alu_en):
+            with m.Switch(self.alu_op):
+                with m.Case(AluOps.ADD):
+                    m.d.comb += [
+                        self.alu32.eq(self.alu_1 + self.alu_2),
+                        self.alu_out.eq(self.alu_1 + self.alu_2)
+                    ]
+                    m.d.sync += [
+                        self.flags[Flags.ZERO].eq(self.alu_out == 0),
+                        self.flags[Flags.CARRY].eq(self.alu32[16]),
+                        self.flags[Flags.NEGATIVE].eq(0)
+                    ]
+                    m.d.comb += self.alu32.eq(0)
+                with m.Default():
+                    m.d.comb += self.alu_out.eq(0)
+                    m.d.sync += self.flags.eq(0)
+                    m.d.sync += self.flags[Flags.ERROR].eq(1)
+        m.d.comb += self.alu_en.eq(0)
+
+                    
+
     def elaborate(self, platform: Platform) -> Module:
         m = Module()
 
-        m.d.comb += self.end_instr_flag.eq(0)
+        m.d.comb += [
+            self.end_instr_flag.eq(0),
+            self.alu_en.eq(0)
+        ]
 
         self.src_bus_setup(m, self.reg16_map, self.alu_1, self.alu_1_sel)
         self.src_bus_setup(m, self.reg16_map, self.alu_2, self.alu_2_sel)
@@ -129,6 +173,7 @@ class Core(Elaboratable):
 
         self.instruction_end_handler(m)
         self.reset_handler(m)
+        self.alu_handler(m)
 
         with m.If(self.reset_state == 3):
             self.cycle(m)
@@ -153,44 +198,113 @@ class Core(Elaboratable):
                 self.NOP(m)
             with m.Case(0x10):
                 self.JMP(m)
-            with m.Default():
+            with m.Case(0x20):
+                self.LDA(m)
+            with m.Case(0x21):
+                self.LDB(m)
+            with m.Case(0x22):
+                self.LDX(m)
+            with m.Case(0x30):
+                self.ADDA(m)
+            with m.Case(0x31):
+                self.ADDB(m)
+            with m.Case(0x32):
+                self.ADDX(m)
+            with m.Default(): #Illegal Instruction, treat as NOP
                 self.NOP(m)
     
     def NOP(self, m: Module):
         self.end_instr(m, self.ip + 1)
 
+    def LDA(self, m: Module):
+        with m.If(self.instr_state == 1):
+            self.advance_ip_goto_state(m, 2)
+        with m.Else():
+            m.d.sync += self.ra.eq(self.data_in)
+            self.end_instr(m, self.ip + 1)
+        
+    def LDB(self, m: Module):
+        with m.If(self.instr_state == 1):
+            self.advance_ip_goto_state(m, 2)
+        with m.Else():
+            m.d.sync += self.rb.eq(self.data_in)
+            self.end_instr(m, self.ip + 1)
+
+    def LDX(self, m: Module):
+        with m.If(self.instr_state == 1):
+            self.advance_ip_goto_state(m, 2)
+        with m.Else():
+            m.d.sync += self.rx.eq(self.data_in)
+            self.end_instr(m, self.ip + 1)
+
     def JMP(self, m: Module):
         with m.Switch(self.instr_state):
             with m.Case(2):
-                m.d.sync += [
-                    self.tmp8.eq(self.data_in),
-                    self.addr.eq(self.ip + 1),
-                    self.ip.eq(self.ip + 1),
-                    self.RW.eq(1),
-                    self.instr_state.eq(3)
-                ]
+                m.d.sync += self.tmp8.eq(self.data_in), 
+                self.advance_ip_goto_state(m, 3)
             with m.Case(3):
                 address = Cat(self.tmp8, self.data_in)
                 m.d.sync += self.tmp8.eq(0)
                 self.end_instr(m, address)
             with m.Default():
-                m.d.sync += [
-                    self.addr.eq(self.ip + 1),
-                    self.ip.eq(self.ip + 1),
-                    self.RW.eq(1),
-                    self.instr_state.eq(2)
-                ]
+                self.advance_ip_goto_state(m, 2)
+
+    def ADDA(self, m:Module):
+        with m.If(self.instr_state == 1):
+            self.advance_ip_goto_state(m, 2)
+        with m.Else():
+            m.d.comb += [
+                self.alu_1.eq(self.ra),
+                self.alu_2.eq(self.data_in),
+                self.alu_op.eq(AluOps.ADD),
+                self.alu_en.eq(1)
+            ]
+            m.d.sync += self.ra.eq(self.alu_out)
+            self.end_instr(m, self.ip + 1)
+
+    def ADDB(self, m:Module):
+        with m.If(self.instr_state == 1):
+            self.advance_ip_goto_state(m, 2)
+        with m.Else():
+            m.d.comb += [
+                self.alu_1.eq(self.rb),
+                self.alu_2.eq(self.data_in),
+                self.alu_op.eq(AluOps.ADD),
+                self.alu_en.eq(1)
+            ]
+            m.d.sync += self.rb.eq(self.alu_out)
+            self.end_instr(m, self.ip + 1)
+
+    def ADDX(self, m:Module):
+        with m.If(self.instr_state == 1):
+            self.advance_ip_goto_state(m, 2)
+        with m.Else():
+            m.d.comb += [
+                self.alu_1.eq(self.rx),
+                self.alu_2.eq(self.data_in),
+                self.alu_op.eq(AluOps.ADD),
+                self.alu_en.eq(1)
+            ]
+            m.d.sync += self.rx.eq(self.alu_out)
+            self.end_instr(m, self.ip + 1)
 
     def instruction_end_handler(self, m: Module):
         with m.If(self.end_instr_flag):
             m.d.sync += self.addr.eq(self.end_instr_addr)
             m.d.sync += self.ip.eq(self.end_instr_addr)
             m.d.sync += self.instr_state.eq(0)
-    
 
     def end_instr(self, m: Module, addr: Statement):
         m.d.comb += self.end_instr_addr.eq(addr)
         m.d.comb += self.end_instr_flag.eq(1)
+
+    def advance_ip_goto_state(self, m: Module, state: int):
+        m.d.sync += [
+                    self.addr.eq(self.ip + 1),
+                    self.ip.eq(self.ip + 1),
+                    self.RW.eq(1),
+                    self.instr_state.eq(state)
+        ]
 
     def reset_handler(self, m: Module):
         with m.Switch(self.reset_state):
@@ -237,11 +351,22 @@ if __name__ == "__main__":
         0x0009: 0x20,
         0x000A: 0x00,
         0x0020: 0x01,
-        0x0023: 0x10,
-        0x0024: 0x20,
-        0x0025: 0x00,
+        0x0023: 0x20,
+        0x0024: 0x15,
+        0x0025: 0x21,
         0x0026: 0xCD,
-        0x0027: 0xEF
+        0x0027: 0x22,
+        0x0028: 0xAB,
+        0x0029: 0x30,
+        0x002A: 0x10,
+        0x002B: 0x31,
+        0x002C: 0x02,
+        0x002D: 0x32,
+        0x002E: 0x01,
+        0x002F: 0x01,
+        0x0030: 0x10,
+        0x0031: 0x29,
+        0x0032: 0x00
     }
     with m.Switch(core.addr):
         for addr, data in mem.items():
@@ -254,30 +379,8 @@ if __name__ == "__main__":
     sim.add_clock(1e-6)
 
     def process():
-        yield
-        yield
-        yield
-        yield
-        yield
-        yield
-        yield
-        yield
-        yield
-        yield
-        yield
-        yield
-        yield
-        yield
-        yield
-        yield
-        yield
-        yield
-        yield
-        yield
-        yield
-        yield
-        yield
-        yield
+        for _ in range(60):
+            yield
 
     sim.add_sync_process(process)
     with sim.write_vcd("core.vcd", "core.gtkw", traces=core.ports()):
