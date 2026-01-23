@@ -212,6 +212,10 @@ class Core(Elaboratable):
                 self.NOP(m)
             with m.Case(0x10):
                 self.JMP(m)
+            with m.Case(0x11):
+                self.JIZ(m)
+            with m.Case(0x12):
+                self.JNZ(m)
             with m.Case(0x20):
                 self.LDA(m)
             with m.Case(0x21):
@@ -268,6 +272,36 @@ class Core(Elaboratable):
                 self.end_instr(m, address)
             with m.Default():
                 self.advance_ip_goto_state(m, 2)
+
+    def JIZ(self, m: Module):
+        with m.If(self.flags[Flags.ZERO]):
+            with m.Switch(self.instr_state):
+                with m.Case(2):
+                    m.d.sync += self.tmp8.eq(self.data_in), 
+                    self.advance_ip_goto_state(m, 3)
+                with m.Case(3):
+                    address = Cat(self.tmp8, self.data_in)
+                    m.d.sync += self.tmp8.eq(0)
+                    self.end_instr(m, address)
+                with m.Default():
+                    self.advance_ip_goto_state(m, 2)
+        with m.Else():
+            self.end_instr(m, self.ip + 3)
+
+    def JNZ(self, m: Module):
+        with m.If(~self.flags[Flags.ZERO]):
+            with m.Switch(self.instr_state):
+                with m.Case(2):
+                    m.d.sync += self.tmp8.eq(self.data_in), 
+                    self.advance_ip_goto_state(m, 3)
+                with m.Case(3):
+                    address = Cat(self.tmp8, self.data_in)
+                    m.d.sync += self.tmp8.eq(0)
+                    self.end_instr(m, address)
+                with m.Default():
+                    self.advance_ip_goto_state(m, 2)
+        with m.Else():
+            self.end_instr(m, self.ip + 3)
 
     def ADDA(self, m:Module):
         with m.If(self.instr_state == 1):
@@ -413,19 +447,27 @@ if __name__ == "__main__":
         0x0023: 0x20,
         0x0024: 0x15,
         0x0025: 0x21,
-        0x0026: 0x04,
+        0x0026: 0x06,
         0x0027: 0x22,
         0x0028: 0xAB,
         0x0029: 0x30,
         0x002A: 0x10,
         0x002B: 0x34,
         0x002C: 0x02,
-        0x002D: 0x32,
-        0x002E: 0x01,
-        0x002F: 0x01,
+        0x002D: 0x11,
+        0x002E: 0x40,
+        0x002F: 0x00,
         0x0030: 0x10,
         0x0031: 0x29,
-        0x0032: 0x00
+        0x0032: 0x00,
+        0x0040: 0x01,
+        0x0041: 0x33,
+        0x0042: 0x10,
+        0x0043: 0x34,
+        0x0044: 0x05,
+        0x0045: 0x10,
+        0x0046: 0x41,
+        0x0047: 0x00
     }
     with m.Switch(core.addr):
         for addr, data in mem.items():
@@ -438,7 +480,7 @@ if __name__ == "__main__":
     sim.add_clock(1e-6)
 
     def process():
-        for _ in range(60):
+        for _ in range(70):
             yield
 
     sim.add_sync_process(process)
