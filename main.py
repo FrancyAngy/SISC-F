@@ -1,12 +1,12 @@
 from enum import IntEnum, auto
 from typing import List, Dict, Tuple, Optional
-from amaranth import Signal, Const, Module
+from amaranth import Signal, Const, Module, Memory
 from amaranth import Signal, Value, Elaboratable, Module, Cat, Const, Mux
 from amaranth import ClockDomain, ClockSignal
 from amaranth.hdl.ast import Statement
 from amaranth.build import Platform
 from amaranth.cli import main_parser, main_runner
-from amaranth.sim import Simulator
+from amaranth.sim import Simulator, SimulatorContext, Settle, Tick
 
 class Reg8(IntEnum):
     NONE = 0
@@ -59,11 +59,24 @@ class Flags(IntEnum):
     ERROR = 3
 
 class Core(Elaboratable):
-    def __init__(self):
+    def __init__(self, useMemory: bool = False, mem_init: Optional[Dict] = None):
+        if useMemory and mem_init == None:
+            raise ValueError("Set useMemory flag without initializing memory")
+
+        self.useMemory = useMemory
+
         self.addr = Signal(16)
         self.data_in = Signal(8)
         self.data_out = Signal(8)
         self.RW = Signal(reset=1) # Read = 1, Write = 0
+
+        if useMemory and not mem_init == None:
+            init = [0xFF] * 65536
+
+            for addr, val in mem_init.items():
+                init[addr] = val
+
+            self.mem = Memory(width=8, depth=65536, init=init)
 
         #Registries
         self.ra = Signal(8, reset_less=True)
@@ -104,7 +117,7 @@ class Core(Elaboratable):
         self.reg8_map = {
             Reg8.RA: (self.ra, True),
             Reg8.RB: (self.rb, True),
-            Reg8.RX: (self.ra, True),
+            Reg8.RX: (self.rx, True),
             Reg8.IPL: (self.ip[8:], True),
             Reg8.IPH: (self.ip[:8], True),
             Reg8.IR: (self.ir, True),
@@ -176,9 +189,30 @@ class Core(Elaboratable):
     def elaborate(self, platform: Platform) -> Module:
         m = Module()
 
+        if self.useMemory:
+            m.submodules.mem = self.mem
+            self.read = self.mem.read_port(domain="comb")
+            self.write = self.mem.write_port()
+            m.d.comb += [
+                self.read.addr.eq(self.addr),
+                self.write.addr.eq(self.addr)
+            ]
+            with m.If(self.RW):
+                m.d.comb += [
+                    self.data_in.eq(self.read.data),
+                    self.write.en.eq(0)
+                ]
+            with m.Else():
+                m.d.comb += [
+                    self.data_in.eq(0xFF),
+                    self.write.data.eq(self.data_out),
+                    self.write.en.eq(1)
+                ]
+
         m.d.comb += [
             self.end_instr_flag.eq(0),
             self.alu_en.eq(0)
+            
         ]
 
         self.src_bus_setup(m, self.reg16_map, self.alu_1, self.alu_1_sel)
@@ -236,6 +270,12 @@ class Core(Elaboratable):
                 self.SUBB(m)
             with m.Case(0x35):
                 self.SUBX(m)
+            with m.Case(0x40):
+                self.STA(m)
+            with m.Case(0x41):
+                self.STB(m)
+            with m.Case(0x42):
+                self.STX(m)
             with m.Default(): #Illegal Instruction, treat as NOP
                 self.NOP(m)
     
@@ -262,6 +302,33 @@ class Core(Elaboratable):
         with m.Else():
             m.d.sync += self.rx.eq(self.data_in)
             self.end_instr(m, self.ip + 1)
+    
+    def store_immediate(self, m: Module, registry: Signal):
+        with m.Switch(self.instr_state):
+            with m.Case(1):
+                self.advance_ip_goto_state(m, 2)
+            with m.Case(2):
+                m.d.sync += self.tmp8.eq(self.data_in)
+                self.advance_ip_goto_state(m, 3)
+            with m.Case(3):
+                m.d.sync += self.addr.eq(Cat(self.tmp8, self.data_in))
+                m.d.sync += self.RW.eq(0) 
+                m.d.sync += self.data_out.eq(registry)
+                m.d.sync += self.instr_state.eq(4)
+            with m.Case(4):
+                m.d.sync += self.RW.eq(1)
+                m.d.sync += self.tmp8.eq(0)
+                m.d.sync += self.data_out.eq(0)
+                self.end_instr(m, self.ip + 1)
+
+    def STA(self, m: Module):
+        self.store_immediate(m, self.ra)
+
+    def STB(self, m: Module):
+        self.store_immediate(m, self.rb)
+
+    def STX(self, m: Module):
+        self.store_immediate(m, self.rx)
 
     def JMP(self, m: Module):
         with m.Switch(self.instr_state):
@@ -396,13 +463,14 @@ class Core(Elaboratable):
         m.d.comb += self.end_instr_addr.eq(addr)
         m.d.comb += self.end_instr_flag.eq(1)
 
-    def advance_ip_goto_state(self, m: Module, state: int):
+    def advance_ip_goto_state(self, m: Module, state: int, RW: int = 1, overrideAddr: bool = True):
         m.d.sync += [
-                    self.addr.eq(self.ip + 1),
                     self.ip.eq(self.ip + 1),
-                    self.RW.eq(1),
+                    self.RW.eq(RW),
                     self.instr_state.eq(state)
         ]
+        if overrideAddr:
+            m.d.sync += self.addr.eq(self.ip + 1)
 
     def reset_handler(self, m: Module):
         with m.Switch(self.reset_state):
@@ -442,8 +510,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     m = Module()
-    
-    m.submodules.core = core = Core()
 
     mem = {
         0x0009: 0x20,
@@ -470,22 +536,32 @@ if __name__ == "__main__":
         0x0042: 0x10,
         0x0043: 0x34,
         0x0044: 0x05,
-        0x0045: 0x00
+        0x0045: 0x40,
+        0x0046: 0x50,
+        0x0047: 0x00,
+        0x0048: 0x01,
+        0x004F: 0x22,
+        0x0050: 0xFA,
+
+        0x0070: 0x00
     }
-    with m.Switch(core.addr):
-        for addr, data in mem.items():
-            with m.Case(addr):
-                m.d.comb += core.data_in.eq(data)
-        with m.Default():
-            m.d.comb += core.data_in.eq(0xFF)
-    
+
+    m.submodules.core = core = Core(True, mem)
+
+    # with m.Switch(core.addr):
+    #     for addr, data in mem.items():
+    #         with m.Case(addr):
+    #             m.d.comb += core.data_in.eq(data)
+    #     with m.Default():
+    #         m.d.comb += core.data_in.eq(0xFF)
+
     sim = Simulator(m)
     sim.add_clock(1e-6)
 
     def process():
-        for _ in range(70):
-            yield
+        for _ in range(100):
+            yield Tick()
 
-    sim.add_sync_process(process)
+    sim.add_process(process)
     with sim.write_vcd("core.vcd", "core.gtkw", traces=core.ports()):
         sim.run()
