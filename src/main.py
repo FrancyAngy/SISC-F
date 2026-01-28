@@ -1,12 +1,14 @@
 from enum import IntEnum, auto
+import os
 from typing import List, Dict, Tuple, Optional
 from amaranth import Signal, Const, Module, Memory
 from amaranth import Signal, Value, Elaboratable, Module, Cat, Const, Mux
-from amaranth import ClockDomain, ClockSignal
 from amaranth.hdl.ast import Statement
 from amaranth.build import Platform
 from amaranth.cli import main_parser, main_runner
 from amaranth.sim import Simulator, SimulatorContext, Settle, Tick
+from instructions import *
+from include.instruction import instruction_opcodes
 
 class Reg8(IntEnum):
     NONE = 0
@@ -57,6 +59,7 @@ class Flags(IntEnum):
     CARRY = 1
     NEGATIVE = 2
     ERROR = 3
+    OVERFLOW = 4
 
 class Core(Elaboratable):
     def __init__(self, useMemory: bool = False, mem_init: Optional[Dict] = None):
@@ -101,9 +104,6 @@ class Core(Elaboratable):
         self.alu_en = Signal()
 
         #BUS selectors
-        self.alu_1_sel = Signal(Reg16)
-        self.alu_2_sel = Signal(Reg16)
-        self.alu_write = Signal(len(Reg16.__members__))
         self.int_args_sel = Signal(Reg16)
         self.int_ret_sel = Signal(Reg16)
         self.int_write = Signal(len(Reg16.__members__))
@@ -215,10 +215,6 @@ class Core(Elaboratable):
             
         ]
 
-        self.src_bus_setup(m, self.reg16_map, self.alu_1, self.alu_1_sel)
-        self.src_bus_setup(m, self.reg16_map, self.alu_2, self.alu_2_sel)
-        self.dest_bus_setup(m, self.reg16_map, self.alu_out, self.alu_write)
-
         self.instruction_end_handler(m)
         self.reset_handler(m)
         self.alu_handler(m)
@@ -253,23 +249,23 @@ class Core(Elaboratable):
             with m.Case(0x12):
                 self.JNZ(m)
             with m.Case(0x20):
-                self.LDA(m)
+                self.LDA_ABS(m)
             with m.Case(0x21):
-                self.LDB(m)
+                self.LDB_ABS(m)
             with m.Case(0x22):
-                self.LDX(m)
+                self.LDX_ABS(m)
             with m.Case(0x30):
-                self.ADDA(m)
+                self.ADDA_ABS(m)
             with m.Case(0x31):
-                self.ADDB(m)
+                self.ADDB_ABS(m)
             with m.Case(0x32):
-                self.ADDX(m)
+                self.ADDX_ABS(m)
             with m.Case(0x33):
-                self.SUBA(m)
+                self.SUBA_ABS(m)
             with m.Case(0x34):
-                self.SUBB(m)
+                self.SUBB_ABS(m)
             with m.Case(0x35):
-                self.SUBX(m)
+                self.SUBX_ABS(m)
             with m.Case(0x40):
                 self.STA(m)
             with m.Case(0x41):
@@ -282,21 +278,21 @@ class Core(Elaboratable):
     def NOP(self, m: Module):
         self.end_instr(m, self.ip + 1)
 
-    def LDA(self, m: Module):
+    def LDA_ABS(self, m: Module):
         with m.If(self.instr_state == 1):
             self.advance_ip_goto_state(m, 2)
         with m.Else():
             m.d.sync += self.ra.eq(self.data_in)
             self.end_instr(m, self.ip + 1)
         
-    def LDB(self, m: Module):
+    def LDB_ABS(self, m: Module):
         with m.If(self.instr_state == 1):
             self.advance_ip_goto_state(m, 2)
         with m.Else():
             m.d.sync += self.rb.eq(self.data_in)
             self.end_instr(m, self.ip + 1)
 
-    def LDX(self, m: Module):
+    def LDX_ABS(self, m: Module):
         with m.If(self.instr_state == 1):
             self.advance_ip_goto_state(m, 2)
         with m.Else():
@@ -372,7 +368,7 @@ class Core(Elaboratable):
         with m.Else():
             self.end_instr(m, self.ip + 3)
 
-    def ADDA(self, m:Module):
+    def ADDA_ABS(self, m:Module):
         with m.If(self.instr_state == 1):
             self.advance_ip_goto_state(m, 2)
         with m.Else():
@@ -385,7 +381,7 @@ class Core(Elaboratable):
             m.d.sync += self.ra.eq(self.alu_out)
             self.end_instr(m, self.ip + 1)
 
-    def ADDB(self, m:Module):
+    def ADDB_ABS(self, m:Module):
         with m.If(self.instr_state == 1):
             self.advance_ip_goto_state(m, 2)
         with m.Else():
@@ -398,7 +394,7 @@ class Core(Elaboratable):
             m.d.sync += self.rb.eq(self.alu_out)
             self.end_instr(m, self.ip + 1)
 
-    def ADDX(self, m:Module):
+    def ADDX_ABS(self, m:Module):
         with m.If(self.instr_state == 1):
             self.advance_ip_goto_state(m, 2)
         with m.Else():
@@ -411,7 +407,7 @@ class Core(Elaboratable):
             m.d.sync += self.rx.eq(self.alu_out)
             self.end_instr(m, self.ip + 1)
 
-    def SUBA(self, m:Module):
+    def SUBA_ABS(self, m:Module):
         with m.If(self.instr_state == 1):
             self.advance_ip_goto_state(m, 2)
         with m.Else():
@@ -424,7 +420,7 @@ class Core(Elaboratable):
             m.d.sync += self.ra.eq(self.alu_out)
             self.end_instr(m, self.ip + 1)
 
-    def SUBB(self, m:Module):
+    def SUBB_ABS(self, m:Module):
         with m.If(self.instr_state == 1):
             self.advance_ip_goto_state(m, 2)
         with m.Else():
@@ -437,7 +433,7 @@ class Core(Elaboratable):
             m.d.sync += self.rb.eq(self.alu_out)
             self.end_instr(m, self.ip + 1)
 
-    def SUBX(self, m:Module):
+    def SUBX_ABS(self, m:Module):
         with m.If(self.instr_state == 1):
             self.advance_ip_goto_state(m, 2)
         with m.Else():
@@ -512,38 +508,37 @@ if __name__ == "__main__":
     m = Module()
 
     mem = {
-        0x0009: 0x20,
-        0x000A: 0x00,
-        0x0020: 0x01,
-        0x0023: 0x20,
+        0x0009: 0x20, #Reset vector low byte
+        0x000A: 0x00, #Reset vector High Byte
+        0x0020: 0x01, #NOP
+        0x0023: 0x20, #LDA_ABS
         0x0024: 0x15,
-        0x0025: 0x21,
+        0x0025: 0x21, #LDB_ABS
         0x0026: 0x06,
-        0x0027: 0x22,
+        0x0027: 0x22, #LDX_ABS
         0x0028: 0xAB,
-        0x0029: 0x30,
-        0x002A: 0x10,
-        0x002B: 0x34,
+        0x0029: 0x30, #ADDA_ABS
+        0x002A: 0x15,
+        0x002B: 0x34, #SUBB_ABS
         0x002C: 0x02,
-        0x002D: 0x11,
+        0x002D: 0x11, #JIZ
         0x002E: 0x40,
         0x002F: 0x00,
-        0x0030: 0x10,
+        0x0030: 0x10, #JMP
         0x0031: 0x29,
         0x0032: 0x00,
-        0x0040: 0x01,
-        0x0041: 0x33,
+        0x0040: 0x01, #NOP
+        0x0041: 0x33, #SUBA_ABS
         0x0042: 0x10,
-        0x0043: 0x34,
-        0x0044: 0x05,
-        0x0045: 0x40,
-        0x0046: 0x50,
+        0x0045: 0x40, #STA
+        0x0046: 0x4A,
         0x0047: 0x00,
-        0x0048: 0x01,
-        0x004F: 0x22,
-        0x0050: 0xFA,
+        0x0048: 0x01, #NOP
+        0x0049: 0x31, #ADDB_ABS
+        0x004A: 0xFA,
+        0x004B: 0x00, #HALT
 
-        0x0070: 0x00
+        0x0070: 0x00 #HALT
     }
 
     m.submodules.core = core = Core(True, mem)
@@ -559,9 +554,17 @@ if __name__ == "__main__":
     sim.add_clock(1e-6)
 
     def process():
-        for _ in range(100):
+        for i in range(300):
+            if (yield core.ir == 0x00) and not 0 <= i <= 4:
+                return
             yield Tick()
 
+    if not os.path.isdir("../sim"):
+        if os.path.exists("../sim"):
+            raise FileExistsError("../sim must be a directory")
+        else:
+            os.mkdir("../sim")
+
     sim.add_process(process)
-    with sim.write_vcd("core.vcd", "core.gtkw", traces=core.ports()):
+    with sim.write_vcd("../sim/core.vcd", "../sim/core.gtkw", traces=core.ports()):
         sim.run()
