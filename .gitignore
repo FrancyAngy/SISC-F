@@ -1,3 +1,5 @@
 *.vcd
 *.gtkw
 .venv
+sim
+__pycache__

@@ -7,7 +7,8 @@ from amaranth.hdl.ast import Statement
 from amaranth.build import Platform
 from amaranth.cli import main_parser, main_runner
 from amaranth.sim import Simulator, SimulatorContext, Settle, Tick
-from instructions import *
+import instructions
+from include.enums import *
 from include.instruction import instruction_opcodes
 
 class Reg8(IntEnum):
@@ -45,21 +46,6 @@ class Reg16(IntEnum):
     INT_RET = 6
     ALU32L = 7
     ALU32H = 8
-
-class AluOps(IntEnum):
-    NONE = 0
-    ADD = auto()
-    SUB = auto()
-    MUL = auto()
-    INC = auto()
-    DEC = auto()
-
-class Flags(IntEnum):
-    ZERO = 0
-    CARRY = 1
-    NEGATIVE = 2
-    ERROR = 3
-    OVERFLOW = 4
 
 class Core(Elaboratable):
     def __init__(self, useMemory: bool = False, mem_init: Optional[Dict] = None):
@@ -238,216 +224,11 @@ class Core(Elaboratable):
     
     def execute(self, m: Module):
         with m.Switch(self.ir):
-            with m.Case(0x00):
-                self.HALT(m)
-            with m.Case(0x01):
-                self.NOP(m)
-            with m.Case(0x10):
-                self.JMP(m)
-            with m.Case(0x11):
-                self.JIZ(m)
-            with m.Case(0x12):
-                self.JNZ(m)
-            with m.Case(0x20):
-                self.LDA_ABS(m)
-            with m.Case(0x21):
-                self.LDB_ABS(m)
-            with m.Case(0x22):
-                self.LDX_ABS(m)
-            with m.Case(0x30):
-                self.ADDA_ABS(m)
-            with m.Case(0x31):
-                self.ADDB_ABS(m)
-            with m.Case(0x32):
-                self.ADDX_ABS(m)
-            with m.Case(0x33):
-                self.SUBA_ABS(m)
-            with m.Case(0x34):
-                self.SUBB_ABS(m)
-            with m.Case(0x35):
-                self.SUBX_ABS(m)
-            with m.Case(0x40):
-                self.STA(m)
-            with m.Case(0x41):
-                self.STB(m)
-            with m.Case(0x42):
-                self.STX(m)
-            with m.Default(): #Illegal Instruction, treat as NOP
-                self.NOP(m)
-    
-    def NOP(self, m: Module):
-        self.end_instr(m, self.ip + 1)
-
-    def LDA_ABS(self, m: Module):
-        with m.If(self.instr_state == 1):
-            self.advance_ip_goto_state(m, 2)
-        with m.Else():
-            m.d.sync += self.ra.eq(self.data_in)
-            self.end_instr(m, self.ip + 1)
-        
-    def LDB_ABS(self, m: Module):
-        with m.If(self.instr_state == 1):
-            self.advance_ip_goto_state(m, 2)
-        with m.Else():
-            m.d.sync += self.rb.eq(self.data_in)
-            self.end_instr(m, self.ip + 1)
-
-    def LDX_ABS(self, m: Module):
-        with m.If(self.instr_state == 1):
-            self.advance_ip_goto_state(m, 2)
-        with m.Else():
-            m.d.sync += self.rx.eq(self.data_in)
-            self.end_instr(m, self.ip + 1)
-    
-    def store_immediate(self, m: Module, registry: Signal):
-        with m.Switch(self.instr_state):
-            with m.Case(1):
-                self.advance_ip_goto_state(m, 2)
-            with m.Case(2):
-                m.d.sync += self.tmp8.eq(self.data_in)
-                self.advance_ip_goto_state(m, 3)
-            with m.Case(3):
-                m.d.sync += self.addr.eq(Cat(self.tmp8, self.data_in))
-                m.d.sync += self.RW.eq(0) 
-                m.d.sync += self.data_out.eq(registry)
-                m.d.sync += self.instr_state.eq(4)
-            with m.Case(4):
-                m.d.sync += self.RW.eq(1)
-                m.d.sync += self.tmp8.eq(0)
-                m.d.sync += self.data_out.eq(0)
-                self.end_instr(m, self.ip + 1)
-
-    def STA(self, m: Module):
-        self.store_immediate(m, self.ra)
-
-    def STB(self, m: Module):
-        self.store_immediate(m, self.rb)
-
-    def STX(self, m: Module):
-        self.store_immediate(m, self.rx)
-
-    def JMP(self, m: Module):
-        with m.Switch(self.instr_state):
-            with m.Case(2):
-                m.d.sync += self.tmp8.eq(self.data_in), 
-                self.advance_ip_goto_state(m, 3)
-            with m.Case(3):
-                address = Cat(self.tmp8, self.data_in)
-                m.d.sync += self.tmp8.eq(0)
-                self.end_instr(m, address)
+            for opcode, inst in instruction_opcodes.items():
+                with m.Case(opcode):
+                    inst.execute(m, self)
             with m.Default():
-                self.advance_ip_goto_state(m, 2)
-
-    def JIZ(self, m: Module):
-        with m.If(self.flags[Flags.ZERO]):
-            with m.Switch(self.instr_state):
-                with m.Case(2):
-                    m.d.sync += self.tmp8.eq(self.data_in), 
-                    self.advance_ip_goto_state(m, 3)
-                with m.Case(3):
-                    address = Cat(self.tmp8, self.data_in)
-                    m.d.sync += self.tmp8.eq(0)
-                    self.end_instr(m, address)
-                with m.Default():
-                    self.advance_ip_goto_state(m, 2)
-        with m.Else():
-            self.end_instr(m, self.ip + 3)
-
-    def JNZ(self, m: Module):
-        with m.If(~self.flags[Flags.ZERO]):
-            with m.Switch(self.instr_state):
-                with m.Case(2):
-                    m.d.sync += self.tmp8.eq(self.data_in), 
-                    self.advance_ip_goto_state(m, 3)
-                with m.Case(3):
-                    address = Cat(self.tmp8, self.data_in)
-                    m.d.sync += self.tmp8.eq(0)
-                    self.end_instr(m, address)
-                with m.Default():
-                    self.advance_ip_goto_state(m, 2)
-        with m.Else():
-            self.end_instr(m, self.ip + 3)
-
-    def ADDA_ABS(self, m:Module):
-        with m.If(self.instr_state == 1):
-            self.advance_ip_goto_state(m, 2)
-        with m.Else():
-            m.d.comb += [
-                self.alu_1.eq(self.ra),
-                self.alu_2.eq(self.data_in),
-                self.alu_op.eq(AluOps.ADD),
-                self.alu_en.eq(1)
-            ]
-            m.d.sync += self.ra.eq(self.alu_out)
-            self.end_instr(m, self.ip + 1)
-
-    def ADDB_ABS(self, m:Module):
-        with m.If(self.instr_state == 1):
-            self.advance_ip_goto_state(m, 2)
-        with m.Else():
-            m.d.comb += [
-                self.alu_1.eq(self.rb),
-                self.alu_2.eq(self.data_in),
-                self.alu_op.eq(AluOps.ADD),
-                self.alu_en.eq(1)
-            ]
-            m.d.sync += self.rb.eq(self.alu_out)
-            self.end_instr(m, self.ip + 1)
-
-    def ADDX_ABS(self, m:Module):
-        with m.If(self.instr_state == 1):
-            self.advance_ip_goto_state(m, 2)
-        with m.Else():
-            m.d.comb += [
-                self.alu_1.eq(self.rx),
-                self.alu_2.eq(self.data_in),
-                self.alu_op.eq(AluOps.ADD),
-                self.alu_en.eq(1)
-            ]
-            m.d.sync += self.rx.eq(self.alu_out)
-            self.end_instr(m, self.ip + 1)
-
-    def SUBA_ABS(self, m:Module):
-        with m.If(self.instr_state == 1):
-            self.advance_ip_goto_state(m, 2)
-        with m.Else():
-            m.d.comb += [
-                self.alu_1.eq(self.ra),
-                self.alu_2.eq(self.data_in),
-                self.alu_op.eq(AluOps.SUB),
-                self.alu_en.eq(1)
-            ]
-            m.d.sync += self.ra.eq(self.alu_out)
-            self.end_instr(m, self.ip + 1)
-
-    def SUBB_ABS(self, m:Module):
-        with m.If(self.instr_state == 1):
-            self.advance_ip_goto_state(m, 2)
-        with m.Else():
-            m.d.comb += [
-                self.alu_1.eq(self.rb),
-                self.alu_2.eq(self.data_in),
-                self.alu_op.eq(AluOps.SUB),
-                self.alu_en.eq(1)
-            ]
-            m.d.sync += self.rb.eq(self.alu_out)
-            self.end_instr(m, self.ip + 1)
-
-    def SUBX_ABS(self, m:Module):
-        with m.If(self.instr_state == 1):
-            self.advance_ip_goto_state(m, 2)
-        with m.Else():
-            m.d.comb += [
-                self.alu_1.eq(self.rx),
-                self.alu_2.eq(self.data_in),
-                self.alu_op.eq(AluOps.SUB),
-                self.alu_en.eq(1)
-            ]
-            m.d.sync += self.rx.eq(self.alu_out)
-            self.end_instr(m, self.ip + 1)
-    
-    def HALT(self, m: Module):
-        self.end_instr(m, self.ip)
+                instructions.NOP.NOP.execute(m, self)
 
     def instruction_end_handler(self, m: Module):
         with m.If(self.end_instr_flag):
