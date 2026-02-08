@@ -1,3 +1,12 @@
+# SISC-F 32-bit CPU
+# Copyright (c) 2026 Francesco Angeloni
+#
+# This source describes Open Hardware and is licensed under the CERN-OHL-W v2.
+# You may redistribute and modify this source and make products using it
+# under the terms of the CERN-OHL-W v2 (https://cern.ch/cern-ohl).
+#
+# SPDX-License-Identifier: CERN-OHL-W-2.0
+
 from include import exceptions
 from include.instruction import *
 from amaranth import Module, Signal, Cat
@@ -7,15 +16,10 @@ def JNZ_exec(m: Module, core):
     with m.If(~core.flags[Flags.ZERO]):
         with m.Switch(core.instr_state):
             with m.Case(2):
-                m.d.sync += core.tmp8.eq(core.data_in), 
-                core.advance_ip_goto_state(m, 3)
-            with m.Case(3):
-                address = Cat(core.tmp8, core.data_in)
-                m.d.sync += core.tmp8.eq(0)
-                core.end_instr(m, address)
+                core.end_instr(m, core.data_in)
             with m.Default():
                 core.advance_ip_goto_state(m, 2)
     with m.Else():
         core.end_instr(m, core.ip + 3)
 
-JNZ = Instruction(0x12, "JNZ", JNZ_exec, 0x03)
+Instruction(0x12, "JNZ", JNZ_exec, 0x03)

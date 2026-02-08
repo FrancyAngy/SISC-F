@@ -1,3 +1,12 @@
+# SISC-F 32-bit CPU
+# Copyright (c) 2026 Francesco Angeloni
+#
+# This source describes Open Hardware and is licensed under the CERN-OHL-W v2.
+# You may redistribute and modify this source and make products using it
+# under the terms of the CERN-OHL-W v2 (https://cern.ch/cern-ohl).
+#
+# SPDX-License-Identifier: CERN-OHL-W-2.0
+
 from include import exceptions
 from include.instruction import *
 from amaranth import Module, Signal
@@ -18,6 +27,6 @@ def LDB_ABS_exec(m: Module, core):
 def LDX_ABS_exec(m: Module, core):
     _LDI_ABS(m, core, core.rx)
 
-LDA_ABS = Instruction(0x20, "LDA_ABS", LDA_ABS_exec, _length)
-LDB_ABS = Instruction(0x21, "LDB_ABS", LDB_ABS_exec, _length)
-LDX_ABS = Instruction(0x22, "LDX_ABS", LDX_ABS_exec, _length)
+Instruction(0x20, "LDA_ABS", LDA_ABS_exec, _length)
+Instruction(0x21, "LDB_ABS", LDB_ABS_exec, _length)
+Instruction(0x22, "LDX_ABS", LDX_ABS_exec, _length)

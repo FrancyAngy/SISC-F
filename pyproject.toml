@@ -1,0 +1,26 @@
+[project]
+name = "SISC-F"
+version = "0.1.0"
+description = "SISC-F (Specialized Instruction Set Computer - F)"
+readme = "README.md"
+requires-python = ">=3.10 <3.13"
+dependencies = [
+    "amaranth-boards",
+    "amaranth-soc",
+    "amaranth[builtin-yosys]>=0.5.8",
+    "argparse>=1.4.0",
+    "importlib>=1.0.4",
+    "litedram>=2024.12",
+    "litesata>=2024.12",
+    "litesdcard>=2024.12",
+    "litex>=2024.12",
+    "litex-boards>=2023.12",
+    "pythondata-software-compiler-rt",
+    "pythondata-software-picolibc",
+]
+
+[tool.uv.sources]
+amaranth-boards = { git = "https://github.com/FrancyAngy/amaranth-boards-tang-nano-20k.git", rev = "main" }
+pythondata-software-compiler-rt = { git = "https://github.com/litex-hub/pythondata-software-compiler_rt.git" }
+pythondata-software-picolibc = { git = "https://github.com/litex-hub/pythondata-software-picolibc.git" }
+amaranth-soc = { git = "https://github.com/amaranth-lang/amaranth-soc.git", rev = "main" }

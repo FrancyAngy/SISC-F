@@ -25,6 +25,6 @@ def SUBB_ABS_exec(m:Module, core):
 def SUBX_ABS_exec(m:Module, core):
     _SUBI_ABS(m, core, core.rx)
 
-SUBA_ABS = Instruction(0x33, "SUBA_ABS", SUBA_ABS_exec, 0x02)
-SUBB_ABS = Instruction(0x34, "SUBB_ABS", SUBB_ABS_exec, 0x02)
-SUBX_ABS = Instruction(0x35, "SUBX_ABS", SUBX_ABS_exec, 0x02)
+Instruction(0x33, "SUBA_ABS", SUBA_ABS_exec, 0x02)
+Instruction(0x34, "SUBB_ABS", SUBB_ABS_exec, 0x02)
+Instruction(0x35, "SUBX_ABS", SUBX_ABS_exec, 0x02)
