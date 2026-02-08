@@ -9,15 +9,20 @@
 
 from include import exceptions
 from include.instruction import *
+from include.enums import *
 from amaranth import Module, Signal
 
-_length = 0x3
+_length = 0x2
 
 def _LDI_ABS(m: Module, core, register: Signal):
     with m.If(core.instr_state == 1):
         core.advance_ip_goto_state(m, 2)
     with m.Else():
-        m.d.sync += register.eq(core.data_in)
+        m.d.sync += [
+            register.eq(core.data_in),
+            core.flags[Flags.NEGATIVE].eq(core.data_in < 0),
+            core.flags[Flags.ZERO].eq(core.data_in == 0),
+        ]
         core.end_instr(m, core.ip + 1)
 
 def LDA_ABS_exec(m: Module, core):

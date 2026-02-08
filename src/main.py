@@ -31,7 +31,7 @@ class Core(Elaboratable):
         self.startAddr = startAddr
 
         self.addr = Signal(32)
-        self.data_in = Signal(32)
+        self.data_in = Signal(signed(32))
         self.data_out = Signal(32)
         self.RW = Signal(reset=1) # Read = 1, Write = 0
 
@@ -93,7 +93,7 @@ class Core(Elaboratable):
                     ]
                     m.d.sync += [
                         self.flags[Flags.ZERO].eq(self.alu_out == 0),
-                        self.flags[Flags.NEGATIVE].eq(self.alu_out <= 0)
+                        self.flags[Flags.NEGATIVE].eq(self.alu_out < 0)
                    ]
                 with m.Default():
                     m.d.comb += self.alu_out.eq(0)
@@ -214,37 +214,43 @@ if __name__ == "__main__":
     m = Module()
 
     mem = {
-        0x0009: 0x20, #Reset vector low byte
-        0x000A: 0x00, #Reset vector High Byte
-        0x0020: 0x01, #NOP
-        0x0023: 0x20, #LDA_ABS
-        0x0024: 0x15,
-        0x0025: 0x21, #LDB_ABS
-        0x0026: 0x06,
-        0x0027: 0x22, #LDX_ABS
-        0x0028: 0xAB,
-        0x0029: 0x30, #ADDA_ABS
-        0x002A: 0x15,
-        0x002B: 0x34, #SUBB_ABS
-        0x002C: 0x02,
-        0x002D: 0x11, #JIZ
-        0x002E: 0x40,
-        0x002F: 0x00,
-        0x0030: 0x10, #JMP
-        0x0031: 0x29,
-        0x0032: 0x00,
-        0x0040: 0x01, #NOP
-        0x0041: 0x33, #SUBA_ABS
-        0x0042: 0x10,
-        0x0045: 0x40, #STA
-        0x0046: 0x4A,
-        0x0047: 0x00,
-        0x0048: 0x01, #NOP
-        0x0049: 0x31, #ADDB_ABS
-        0x004A: 0xFA,
-        0x004B: 0x00, #HALT
+        0x00000009: 0x00000020, #Reset vector
+        0x00000020: 0x00000001, #NOP
+        0x00000023: 0x00000020, #LDA_ABS
+        0x00000024: 0x00000015,
+        0x00000025: 0x00000021, #LDB_ABS
+        0x00000026: 0x00000006,
+        0x00000027: 0x00000022, #LDX_ABS
+        0x00000028: 0x000000AB,
+        0x00000029: 0x00000030, #ADDA_ABS
+        0x0000002A: 0x00000015,
+        0x0000002B: 0x00000034, #SUBB_ABS
+        0x0000002C: 0x00000002,
+        0x0000002D: 0x00000011, #JIZ
+        0x0000002E: 0x00000040,
+        0x00000030: 0x00000010, #JMP
+        0x00000031: 0x00000029,
+        0x00000040: 0x00000001, #NOP
+        0x00000041: 0x00000033, #SUBA_ABS
+        0x00000042: 0x00000010,
+        0x00000045: 0x00000040, #STA
+        0x00000046: 0x0000004A,
+        0x00000048: 0x00000001, #NOP
+        0x00000049: 0x00000031, #ADDB_ABS
+        0x0000004A: 0x000000FA,
+        0x0000004B: 0x000000E2, #ADDX
+        0x0000004C: 0x00002000,
+        0x0000004D: 0x00000041, #STB
+        0x0000004E: 0x00002001,
+        0x0000004F: 0x000000D0, #LDA
+        0x00000050: 0x00002002,
+        0x00000051: 0x000000C0, #SUBA
+        0x00000052: 0x00002001,
+        0x00000053: 0x00000000, #HALT
 
-        0x0070: 0x00 #HALT
+        0x00000070: 0x00000000, #HALT
+        0x00002000: 0x10000000,
+        0x00002002: 0x80000000,
     }
 
     m.submodules.core = core = Core(useMemory=True, mem_init=mem)
