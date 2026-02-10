@@ -79,7 +79,7 @@ class Core(Elaboratable):
         self.end_instr_addr = Signal(32)
 
     def ports(self) -> List[Signal]:
-        return [self.ip, self.ir, self.addr, self.data_in, self.tmp32, self.tmp32_2, self.data_out, self.RW, self.ra, self.rb, self.rx, self.flags, self.instr_state, self.sp, self.stack_op, self.stack_en, self.stack_data]
+        return [self.ip, self.ir, self.addr, self.data_in, self.tmp32, self.tmp32_2, self.data_out, self.RW, self.ra, self.rb, self.rx, self.alu_op, self.flags, self.instr_state, self.stack_op]
         
     def alu_handler(self, m: Module):
         with m.If(self.alu_en):
@@ -274,6 +274,27 @@ if __name__ == "__main__":
         0x00000070: 0x00000000, #HALT
         0x00002000: 0x10000000,
         0x00002002: 0x80000000,
+    }
+
+    subroutine_test_mem = {
+        0x00004000: 0x00000030,
+        0x00004001: 0x00000010,
+        0x00004002: 0x00000034,
+        0x00004003: 0x00000001,
+        0x00004004: 0x000000B5,
+
+        0x00000009: 0x00000020,
+        0x00000020: 0x00000020,
+        0x00000021: 0x00000005,
+        0x00000022: 0x000000A1,
+        0x00000023: 0x00000021,
+        0x00000024: 0x00000011,
+        0x00000025: 0x000000A2,
+        0x00000026: 0x000000A5,
+        0x00000027: 0x00004000,
+        0x00000028: 0x000000B2,
+        0x00000029: 0x000000B1,
+        0x0000002A: 0x00000000
     }
 
     m.submodules.core = core = Core(useMemory=True, mem_init=mem)
