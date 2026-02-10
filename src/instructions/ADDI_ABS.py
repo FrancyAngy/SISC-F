@@ -11,8 +11,12 @@ from include import exceptions
 from include.instruction import *
 from amaranth import Module, Signal, Cat
 from include.enums import *
+from typing import TYPE_CHECKING
 
-def _ADDI_ABS(m: Module, core, register: Signal):
+if TYPE_CHECKING:
+    from main import Core
+
+def _ADDI_ABS(m: Module, core: "Core", register: Signal):
     with m.If(core.instr_state == 1):
         core.advance_ip_goto_state(m, 2)
     with m.Else():

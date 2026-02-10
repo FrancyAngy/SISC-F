@@ -10,8 +10,12 @@
 from include import exceptions
 from include.instruction import *
 from amaranth import Module
+from typing import TYPE_CHECKING
 
-def NOP_exec(m: Module, core):
+if TYPE_CHECKING:
+    from main import Core
+
+def NOP_exec(m: Module, core: "Core"):
     core.end_instr(m, core.ip + 1)
 
 Instruction(0x01, "NOP", NOP_exec)

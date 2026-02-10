@@ -11,8 +11,12 @@ from include import exceptions
 from include.instruction import *
 from amaranth import Module, Signal, Cat
 from include.enums import *
+from typing import TYPE_CHECKING
 
-def JIZ_exec(m: Module, core):
+if TYPE_CHECKING:
+    from main import Core
+
+def JIZ_exec(m: Module, core: "Core"):
     with m.If(core.flags[Flags.ZERO]):
         with m.Switch(core.instr_state):
             with m.Case(2):

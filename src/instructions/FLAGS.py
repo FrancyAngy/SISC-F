@@ -11,8 +11,12 @@ from include import exceptions
 from include.instruction import *
 from amaranth import Module
 from include.enums import *
+from typing import TYPE_CHECKING
 
-def _execute(m: Module, core, flag: Flags, value: int):
+if TYPE_CHECKING:
+    from main import Core
+
+def _execute(m: Module, core: "Core", flag: Flags, value: int):
     m.d.sync += core.flags[flag].eq(value)
 
 def _SCF(m: Module, core):

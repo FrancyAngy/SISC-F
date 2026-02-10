@@ -10,8 +10,12 @@
 from include import exceptions
 from include.instruction import *
 from amaranth import Module, Signal, Cat
+from typing import TYPE_CHECKING
 
-def JMP_exec(m: Module, core):
+if TYPE_CHECKING:
+    from main import Core
+
+def JMP_exec(m: Module, core:"Core"):
     with m.Switch(core.instr_state):
         with m.Case(2):
             core.end_instr(m, core.data_in)

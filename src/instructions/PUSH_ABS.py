@@ -7,38 +7,30 @@
 #
 # SPDX-License-Identifier: CERN-OHL-W-2.0
 
-from include import exceptions
 from include.instruction import *
-from amaranth import Module, Signal, Cat
 from include.enums import *
+from amaranth import Module, Signal, Const, signed
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from main import Core
 
-def _STI(m: Module, core:"Core", registry: Signal):
+def _exec(m: Module, core: "Core"):
     with m.Switch(core.instr_state):
         with m.Case(1):
             core.advance_ip_goto_state(m, 2)
         with m.Case(2):
-            m.d.sync += core.addr.eq(core.data_in)
-            m.d.sync += core.RW.eq(0) 
-            m.d.sync += core.data_out.eq(registry)
+            m.d.comb += [
+                core.stack_data.eq(core.data_in),
+                core.stack_op.eq(StackOps.PUSH),
+                core.stack_en.eq(1)
+            ]
             m.d.sync += core.instr_state.eq(3)
         with m.Case(3):
-            m.d.sync += core.RW.eq(1)
-            m.d.sync += core.data_out.eq(0)
+            m.d.sync += [
+                core.RW.eq(1),
+                core.data_out.eq(0)
+            ]
             core.end_instr(m, core.ip + 1)
 
-def STA_exec(m: Module, core):
-    _STI(m, core, core.ra)
-
-def STB_exec(m: Module, core):
-    _STI(m, core, core.rb)
-
-def STX_exec(m: Module, core):
-    _STI(m, core, core.rx)
-
-Instruction(0x40, "STA", STA_exec, 0x3)
-Instruction(0x41, "STB", STB_exec, 0x3)
-Instruction(0x42, "STX", STX_exec, 0x3)
+Instruction(0xA4, "PUSH_ABS", _exec, 0x2)

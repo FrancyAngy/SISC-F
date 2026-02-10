@@ -11,10 +11,14 @@ from include import exceptions
 from include.instruction import *
 from include.enums import *
 from amaranth import Module, Signal
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from main import Core
 
 _length = 0x2
 
-def _LDI_ABS(m: Module, core, register: Signal):
+def _LDI_ABS(m: Module, core:"Core", register: Signal):
     with m.If(core.instr_state == 1):
         core.advance_ip_goto_state(m, 2)
     with m.Else():

@@ -22,7 +22,7 @@ class OpcodeAlreadyExists(Exception):
         self.addInfo = addInfo
 
     def __str__(self) -> str:
-        e: str = f"Tried assigining instruction {self.instrName} to opcode {self.opcode}, but it was already assigned to instruction {instruction_opcodes[self.opcode].name}. "
+        e: str = f"Tried assigining instruction {self.instrName} to opcode 0x{hex(self.opcode).upper()[2:]}, but it was already assigned to instruction {instruction_opcodes[self.opcode].name}. "
         if self.addInfo != None:
             e += f"Additional info are provided: {self.addInfo}"
         return e
@@ -58,7 +58,7 @@ class Instruction:
         assembler_inst[self.name] = self
 
     def __str__(self) -> str:
-        s = f"Instruction {self.name} with opcode {self.opcode} and length {self.length}."
+        s = f"Instruction {self.name} with opcode 0x{hex(self.opcode).upper()[2:]} and length 0x{hex(self.length).upper()[2:]}."
         if self._asmFunc != None:
             s += "Overrides assembler standard instructions."
 

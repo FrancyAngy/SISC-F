@@ -11,8 +11,12 @@ from include import exceptions
 from include.instruction import *
 from amaranth import Module, Signal, Cat
 from include.enums import *
+from typing import TYPE_CHECKING
 
-def _SUBI(m: Module, core, register: Signal):
+if TYPE_CHECKING:
+    from main import Core
+
+def _SUBI(m: Module, core:"Core", register: Signal):
     with m.Switch(core.instr_state):
         with m.Case(1):
             core.advance_ip_goto_state(m, 2)

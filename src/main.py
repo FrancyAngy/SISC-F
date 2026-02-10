@@ -10,8 +10,7 @@
 from enum import IntEnum, auto
 import os
 from typing import List, Dict, Tuple, Optional
-from amaranth import Signal, Const, Module, Memory, signed
-from amaranth import Signal, Value, Elaboratable, Module, Cat, Const, Mux
+from amaranth import Signal, Const, Module, Memory, signed, Elaboratable
 from amaranth.hdl.ast import Statement
 from amaranth.build import Platform
 from amaranth.cli import main_parser, main_runner
@@ -49,7 +48,10 @@ class Core(Elaboratable):
         self.rx = Signal(signed(32), reset_less=True)
         self.ip = Signal(32, reset_less=True)
         self.ir = Signal(32, reset_less=True)
-        self.sp = Signal(32, reset_less=True)
+        if useMemory:
+            self.sp = Signal(32, reset=int(pow(2, 18) - 1))
+        else:
+            self.sp = Signal(32, reset_less=True)
         self.qp = Signal(32, reset_less=True)
         self.flags = Signal(8, reset_less=True)
         self.tmp32 = Signal(32)
@@ -64,6 +66,9 @@ class Core(Elaboratable):
         self.alu_op = Signal(AluOps)
         self.alu_out = Signal(signed(32))
         self.alu_en = Signal()
+        self.stack_op = Signal(StackOps)
+        self.stack_data = Signal(32)
+        self.stack_en = Signal()
         self.internal_op = Signal()
         self.stall = Signal()
 
@@ -74,7 +79,7 @@ class Core(Elaboratable):
         self.end_instr_addr = Signal(32)
 
     def ports(self) -> List[Signal]:
-        return [self.ip, self.ir, self.addr, self.data_in, self.tmp32, self.tmp32_2, self.data_out, self.RW, self.ra, self.rb, self.rx, self.flags]
+        return [self.ip, self.ir, self.addr, self.data_in, self.tmp32, self.tmp32_2, self.data_out, self.RW, self.ra, self.rb, self.rx, self.flags, self.instr_state, self.sp, self.stack_op, self.stack_en, self.stack_data]
         
     def alu_handler(self, m: Module):
         with m.If(self.alu_en):
@@ -103,8 +108,25 @@ class Core(Elaboratable):
         m.d.comb += [
             self.alu_en.eq(0)
         ]
+    
+    def stack_handler(self, m: Module):
+        with m.If(self.stack_en):
+            with m.Switch(self.stack_op):
+                with m.Case(StackOps.PUSH):
+                    m.d.sync += [
+                        self.addr.eq(self.sp),
+                        self.sp.eq(self.sp - 1),
+                        self.data_out.eq(self.stack_data),
+                        self.RW.eq(0)
+                    ]
+                with m.Case(StackOps.POP):
+                    m.d.sync += [
+                        self.sp.eq(self.sp + 1),
+                        self.addr.eq(self.sp + 1),
+                        self.RW.eq(1)
+                    ]
+            m.d.comb += self.stack_en.eq(0)
 
-                    
 
     def elaborate(self, platform: Platform) -> Module:
         m = Module()
@@ -131,13 +153,14 @@ class Core(Elaboratable):
 
         m.d.comb += [
             self.end_instr_flag.eq(0),
-            self.alu_en.eq(0)
-            
+            self.alu_en.eq(0),
+            self.stack_en.eq(0),
         ]
 
         self.instruction_end_handler(m)
         self.reset_handler(m)
         self.alu_handler(m)
+        self.stack_handler(m)
 
         with m.If(self.reset_state == 2):
             self.cycle(m)
@@ -159,7 +182,7 @@ class Core(Elaboratable):
     def execute(self, m: Module):
         with m.Switch(self.ir):
             for opcode, inst in instruction_opcodes.items():
-                with m.Case(opcode):
+                with m.Case(Const(opcode, signed(32))):
                     inst.execute(m, self)
             with m.Default():
                 instruction_names["NOP"].execute(m, self)
@@ -251,32 +274,6 @@ if __name__ == "__main__":
         0x00000070: 0x00000000, #HALT
         0x00002000: 0x10000000,
         0x00002002: 0x80000000,
-    }
-
-    mov_test_mem = {
-        0x00000009: 0x00000020, #Reset vector
-        0x00000020: 0x00000002, #MOV
-        0x00000021: 0x00002000,
-        0x00000022: 0x00003000,
-        0x00000023: 0x00000002, #MOV
-        0x00000024: 0x00002001,
-        0x00000025: 0xFFFFFF00, #RA
-        0x00000026: 0x000000D1, #LDB
-        0x00000027: 0x00003000,
-        0x00000028: 0x00000002, #MOV
-        0x00000029: 0xFFFFFF00, #RA
-        0x0000002A: 0xFFFFFF02, #RX
-        0x0000002B: 0x00000032, #ADDX_ABS
-        0x0000002C: 0x00000012,
-        0x0000002D: 0x00000002, #MOV
-        0x0000002E: 0xFFFFFF02, #RX
-        0x0000002F: 0x00002002,
-        0x00000030: 0x000000C1, #SUBB
-        0x00000031: 0x00002002,
-        0x00000032: 0x00000000, #HALT
-
-        0x00002000: 0x12345678,
-        0x00002001: 0x00001243
     }
 
     m.submodules.core = core = Core(useMemory=True, mem_init=mem)

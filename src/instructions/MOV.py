@@ -10,10 +10,14 @@
 from include.instruction import *
 from include.enums import *
 from amaranth import Module, Signal, Const, signed
+from typing import TYPE_CHECKING
 
-_length = 0x6
+if TYPE_CHECKING:
+    from main import Core
 
-def _exec(m: Module, core):
+_length = 0x3
+
+def _exec(m: Module, core:"Core"):
     reg_address = {
         0xFFFFFF00: core.ra,
         0xFFFFFF01: core.rb,
@@ -81,4 +85,4 @@ def _exec(m: Module, core):
             core.advance_ip_goto_state(m, 2)
 
 
-Instruction(0x02, "MOV", _exec, 0x3)
+Instruction(0x02, "MOV", _exec, _length)

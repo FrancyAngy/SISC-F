@@ -17,6 +17,11 @@ class AluOps(IntEnum):
     INC = auto()
     DEC = auto()
 
+class StackOps(IntEnum):
+    NONE = 0
+    PUSH = auto()
+    POP = auto()
+
 class Flags(IntEnum):
     ZERO = 0
     CARRY = 1
