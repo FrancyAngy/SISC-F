@@ -3,7 +3,7 @@ name = "SISC-F"
 version = "0.1.0"
 description = "SISC-F (Specialized Instruction Set Computer - F)"
 readme = "README.md"
-requires-python = ">=3.10 <3.13"
+requires-python = ">=3.10, <3.13"
 dependencies = [
     "amaranth-boards",
     "amaranth-soc",

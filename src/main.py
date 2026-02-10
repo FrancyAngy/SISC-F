@@ -65,6 +65,7 @@ class Core(Elaboratable):
         self.alu_2 = Signal(signed(32))
         self.alu_op = Signal(AluOps)
         self.alu_out = Signal(signed(32))
+        self.alu_33 = Signal(33)
         self.alu_en = Signal()
         self.stack_op = Signal(StackOps)
         self.stack_data = Signal(32)
@@ -79,26 +80,53 @@ class Core(Elaboratable):
         self.end_instr_addr = Signal(32)
 
     def ports(self) -> List[Signal]:
-        return [self.ip, self.ir, self.addr, self.data_in, self.tmp32, self.tmp32_2, self.data_out, self.RW, self.ra, self.rb, self.rx, self.alu_op, self.flags, self.instr_state, self.stack_op]
+        return [self.ip, self.ir, self.addr, self.data_in, self.tmp32, self.tmp32_2, self.data_out, self.RW, self.ra, self.rb, self.rx, self.alu_op, self.alu_1, self.alu_2, self.alu_out, self.flags, self.instr_state, self.stack_op]
         
     def alu_handler(self, m: Module):
         with m.If(self.alu_en):
+            self.flags.eq(0)
             with m.Switch(self.alu_op):
                 with m.Case(AluOps.ADD):
                     m.d.comb += [
-                        self.alu_out.eq(self.alu_1 + self.alu_2)
+                        self.alu_out.eq(self.alu_1 + self.alu_2),
+                        self.alu_33.eq(self.alu_1.as_unsigned() + self.alu_2.as_unsigned()),
                     ]
                     m.d.sync += [
                         self.flags[Flags.ZERO].eq(self.alu_out == 0),
-                        self.flags[Flags.NEGATIVE].eq(self.alu_out < 0)
+                        self.flags[Flags.NEGATIVE].eq(self.alu_out < 0),
+                        self.flags[Flags.OVERFLOW].eq((self.alu_1[31] == self.alu_2[31]) & (self.alu_1[31] != self.alu_out[31])),
+                        self.flags[Flags.CARRY].eq(self.alu_33[32])
                     ]
                 with m.Case(AluOps.SUB):
                     m.d.comb += [
                         self.alu_out.eq(self.alu_1 - self.alu_2),
+                        self.alu_33.eq(self.alu_1.as_unsigned() - self.alu_2.as_unsigned()),
                     ]
                     m.d.sync += [
                         self.flags[Flags.ZERO].eq(self.alu_out == 0),
-                        self.flags[Flags.NEGATIVE].eq(self.alu_out < 0)
+                        self.flags[Flags.NEGATIVE].eq(self.alu_out < 0),
+                        self.flags[Flags.OVERFLOW].eq((self.alu_1[31] != self.alu_2[31]) & (self.alu_1[31] != self.alu_out[31])),
+                        self.flags[Flags.CARRY].eq(self.alu_33[32])
+                   ]
+                with m.Case(AluOps.INC):
+                    m.d.comb += [
+                        self.alu_out.eq(self.alu_1 + 1)
+                    ]
+                    m.d.sync += [
+                        self.flags[Flags.ZERO].eq(self.alu_out == 0),
+                        self.flags[Flags.NEGATIVE].eq(self.alu_out < 0),
+                        self.flags[Flags.OVERFLOW].eq(self.alu_out.as_signed() < self.alu_1.as_signed()),
+                        self.flags[Flags.CARRY].eq(0)
+                   ]
+                with m.Case(AluOps.DEC):
+                    m.d.comb += [
+                        self.alu_out.eq(self.alu_1 - 1)
+                    ]
+                    m.d.sync += [
+                        self.flags[Flags.ZERO].eq(self.alu_out == 0),
+                        self.flags[Flags.NEGATIVE].eq(self.alu_out < 0),
+                        self.flags[Flags.OVERFLOW].eq(self.alu_out.as_signed() > self.alu_1.as_signed()),
+                        self.flags[Flags.CARRY].eq(0)
                    ]
                 with m.Default():
                     m.d.comb += self.alu_out.eq(0)
@@ -277,27 +305,28 @@ if __name__ == "__main__":
     }
 
     subroutine_test_mem = {
-        0x00004000: 0x00000030,
+        0x00004000: 0x00000030, #ADDA_ABS
         0x00004001: 0x00000010,
-        0x00004002: 0x00000034,
-        0x00004003: 0x00000001,
-        0x00004004: 0x000000B5,
+        0x00004002: 0x0000003A, #DECB
+        0x00004004: 0x000000B5, #RET
 
-        0x00000009: 0x00000020,
-        0x00000020: 0x00000020,
-        0x00000021: 0x00000005,
-        0x00000022: 0x000000A1,
-        0x00000023: 0x00000021,
+        0x00000009: 0x00000020, #Reset Vector
+        0x00000020: 0x00000020, #LDA_ABS
+        0x00000021: 0xFFFFFFFF,
+        0x00000022: 0x000000A1, #PUSHA
+        0x00000023: 0x00000021, #LDB_ABS
         0x00000024: 0x00000011,
-        0x00000025: 0x000000A2,
-        0x00000026: 0x000000A5,
+        0x00000025: 0x000000A2, #PUSHB
+        0x00000026: 0x000000A5, #VISIT
         0x00000027: 0x00004000,
-        0x00000028: 0x000000B2,
-        0x00000029: 0x000000B1,
-        0x0000002A: 0x00000000
+        0x00000028: 0x000000B2, #POPA
+        0x00000029: 0x000000B1, #POPB
+        0x0000002A: 0x00000039, #DECA
+        0x0000002B: 0x00000037, #INCB
+        0x0000002C: 0x00000000  #HALT
     }
 
-    m.submodules.core = core = Core(useMemory=True, mem_init=mem)
+    m.submodules.core = core = Core(useMemory=True, mem_init=subroutine_test_mem)
 
     # with m.Switch(core.addr):
     #     for addr, data in mem.items():
