@@ -24,3 +24,9 @@ amaranth-boards = { git = "https://github.com/FrancyAngy/amaranth-boards-tang-na
 pythondata-software-compiler-rt = { git = "https://github.com/litex-hub/pythondata-software-compiler_rt.git" }
 pythondata-software-picolibc = { git = "https://github.com/litex-hub/pythondata-software-picolibc.git" }
 amaranth-soc = { git = "https://github.com/amaranth-lang/amaranth-soc.git", rev = "main" }
+
+[dependency-groups]
+dev = [
+    "isort>=9.0.2",
+    "ruff>=0.16.10",
+]
