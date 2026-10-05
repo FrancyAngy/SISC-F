@@ -5,19 +5,26 @@ description = "SISC-F (Specialized Instruction Set Computer - F)"
 readme = "README.md"
 requires-python = ">=3.10, <3.13"
 dependencies = [
-    "amaranth-boards",
-    "amaranth-soc",
-    "amaranth[builtin-yosys]>=0.5.8",
-    "argparse>=1.4.0",
-    "importlib>=1.0.4",
-    "litedram>=2024.12",
-    "litesata>=2024.12",
-    "litesdcard>=2024.12",
-    "litex>=2024.12",
-    "litex-boards>=2023.12",
-    "pythondata-software-compiler-rt",
-    "pythondata-software-picolibc",
+  "amaranth-boards",
+  "amaranth-soc",
+  "amaranth[builtin-yosys]>=0.5.8",
+  "argparse>=1.4.0",
+  "importlib>=1.0.4",
+  "litedram>=2024.12",
+  "litesata>=2024.12",
+  "litesdcard>=2024.12",
+  "litex>=2024.12",
+  "litex-boards>=2023.12",
+  "pythondata-software-compiler-rt",
+  "pythondata-software-picolibc",
 ]
+
+[project.scripts]
+simulate = "sisc_f:simulate"
+
+[build-system]
+requires = ["uv_build>=0.9.0,<0.10"]
+build-backend = "uv_build"
 
 [tool.uv.sources]
 amaranth-boards = { git = "https://github.com/FrancyAngy/amaranth-boards-tang-nano-20k.git", rev = "main" }
@@ -26,7 +33,4 @@ pythondata-software-picolibc = { git = "https://github.com/litex-hub/pythondata-
 amaranth-soc = { git = "https://github.com/amaranth-lang/amaranth-soc.git", rev = "main" }
 
 [dependency-groups]
-dev = [
-    "isort>=9.0.2",
-    "ruff>=0.16.10",
-]
+dev = ["isort>=9.0.2", "ruff>=0.16.10"]

@@ -470,7 +470,7 @@ wheels = [
 [[package]]
 name = "sisc-f"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "amaranth", extra = ["builtin-yosys"] },
     { name = "amaranth-boards" },
