@@ -13,7 +13,7 @@ from ..include.enums import Flags
 for file in os.listdir(os.path.dirname(__file__)):
     if file.endswith(".py") and file != "__init__.py":
         module_name = file[:-3]
-        importlib.import_module(f"sisc_f.alu.{module_name}")
+        importlib.import_module(f"{__name__}.{module_name}")
 
 if TYPE_CHECKING:
     from ..main import Core
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 def alu_handler(m: Module, core: "Core"):
     with m.If(core.alu_en):
-        core.flags.eq(0)
+        m.d.sync += core.flags.eq(0)
         with m.Switch(core.alu_op):
             for operation, implementation in alu_ops.alu_operations.items():
                 with m.Case(operation):

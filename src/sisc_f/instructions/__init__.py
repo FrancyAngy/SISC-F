@@ -11,4 +11,4 @@ __all__ = ["instruction_names", "instruction_opcodes"]
 for file in os.listdir(os.path.dirname(__file__)):
     if file.endswith(".py") and file != "__init__.py":
         module_name = file[:-3]
-        importlib.import_module(f"sisc_f.instructions.{module_name}")
+        importlib.import_module(f"{__name__}.{module_name}")
